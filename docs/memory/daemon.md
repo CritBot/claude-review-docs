@@ -1,10 +1,16 @@
 # Daemon & Autostart
 
-The consolidation daemon is a lightweight background process that periodically analyzes stored findings and produces cross-PR pattern summaries.
+!!! tip "No daemon required for most users"
+    `claude-review` has an **on-wake trigger**: consolidation fires automatically in the background whenever you run any `claude-review` command, if the time or volume trigger is met. You do not need the daemon unless you want consolidation to run even when you're not actively using the tool.
+
+The optional background daemon is useful for:
+- Shared CI machines where reviews run unattended
+- Always-on developer workstations where you want patterns consolidated even during idle periods
+- Teams who want the `insights` command to always reflect the latest patterns
 
 ## What the daemon does
 
-The daemon wakes up every 30 minutes (or when 10+ new findings have been stored since the last run) and calls the Consolidation Agent. This agent:
+The daemon wakes up every 5 minutes, checks if consolidation should run (30-minute time trigger or 10-finding volume trigger), and if so calls the Consolidation Agent. This agent:
 
 1. Reads all findings stored since the last consolidation
 2. Groups them by file, severity, and description similarity

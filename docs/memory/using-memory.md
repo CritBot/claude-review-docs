@@ -4,39 +4,29 @@ This guide walks through the practical day-to-day usage of the memory layer.
 
 ## Setup (one time)
 
-### 1. Start the daemon
+No daemon setup required. The memory layer is zero-configuration: consolidation fires automatically in the background when you run any `claude-review` command and the trigger conditions are met.
+
+Just start using `--memory` on your reviews:
 
 ```bash
-claude-review memory start
+claude-review diff --memory
+claude-review pr 123 --memory
 ```
 
-### 2. (Optional) Install as a system service
+The first time you run with `--memory`, the `.claude-review/memory.db` database is created in your repo root. From that point on, the on-wake trigger fires consolidation on your next command invocation once 30 minutes have elapsed or 10+ findings have been stored.
 
-On macOS:
-```bash
-claude-review memory install
-```
-
-On Linux:
-```bash
-claude-review memory install
-systemctl --user enable claude-review-memory
-systemctl --user start claude-review-memory
-```
-
-This ensures the daemon starts automatically after reboots.
-
-### 3. Verify it's running
+### Optional: verify DB state
 
 ```bash
 claude-review memory status
 ```
 
 ```
-Memory daemon: running (PID 18423)
-Database: ~/.claude-review/memory.db
-Findings stored: 0
-Consolidations run: 0
+Daemon: not running (not needed — on-wake consolidation is active)
+Findings stored: 12 (accepted: 12)
+Consolidations:  2
+False positives: 0
+Last consolidation: 2026-03-11 15:20
 ```
 
 ## Day-to-day usage
@@ -136,20 +126,19 @@ Good reasons to do this:
 
 ## Troubleshooting
 
-**Daemon not starting**
-
-```bash
-claude-review memory status
-# if "not running", check for stale PID file:
-ls ~/.claude-review/
-rm ~/.claude-review/memory.pid  # if process is gone but PID file remains
-claude-review memory start
-```
-
 **Findings not being stored**
 
-Make sure you're running with `--memory` or have it set in config. Without the flag, findings are not stored.
+Make sure you're running with `--memory` or have it set in config. Without the flag, findings are not stored and the DB is not created.
+
+**Consolidation not firing**
+
+Run any `claude-review` command. If the DB exists and either trigger is met (30 min elapsed or 10+ new findings), you'll see `[memory] consolidating patterns in background...` on stderr.
+
+Check the last consolidation time:
+```bash
+claude-review memory status
+```
 
 **Memory not providing useful context**
 
-This is normal early on. Accumulate more reviews — context improves with volume.
+This is normal early on. Accumulate more reviews — context improves with volume. Consolidation only fires when there are new findings, so the first few reviews will have minimal context.

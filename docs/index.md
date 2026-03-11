@@ -87,7 +87,7 @@ Three jobs run as a persistent local process:
 
 **Ingest** — after every review run with `--memory`, all findings go into `.claude-review/memory.db`: file, line, severity, category, whether you rejected them as noise. Automatic.
 
-**Consolidate** — the daemon wakes every 30 minutes (or after 10 new findings) and calls Claude with *metadata only — no source code* — to find cross-PR patterns. "Your payments module has had null pointer bugs in 4 of the last 6 PRs." Costs fractions of a cent per cycle.
+**Consolidate** — triggers automatically in the background on your next command invocation if 30+ minutes have passed or 10+ new findings exist. Calls Claude with *metadata only — no source code* — to find cross-PR patterns. "Your payments module has had null pointer bugs in 4 of the last 6 PRs." No daemon, no setup. Costs fractions of a cent per cycle.
 
 **Query** — before the next review, finder agents query memory for the files being changed. They already know which areas are hotspots and which findings you've previously rejected.
 

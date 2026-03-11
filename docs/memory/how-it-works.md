@@ -39,16 +39,21 @@ When you run `claude-review diff --memory`, before the finder agents are invoked
 
 This means the finder agents know: *"In the last month, this file has had issues with X and Y — watch for them."*
 
-### 3. Consolidation agent (background daemon)
+### 3. Consolidation agent (on-wake trigger)
 
-The daemon runs a consolidation pass:
+Consolidation does not require a background daemon. Instead, it fires automatically in the background at the start of any `claude-review` command invocation if either trigger condition is met:
 
-- **Time trigger**: every 30 minutes (if at least 1 new finding exists since the last run)
-- **Volume trigger**: when 10+ new findings have been stored since the last consolidation
+- **Time trigger**: 30+ minutes have elapsed since the last consolidation (and at least 1 new finding exists)
+- **Volume trigger**: 10+ new findings have been stored since the last consolidation
+- **First-run**: immediately, if the DB has findings and has never been consolidated
 
-Either condition is sufficient. The first time the daemon runs with any findings stored, it consolidates immediately.
+This design piggybacks on your normal usage. Close your laptop and it pauses. Open it, run any `claude-review` command, and it catches up — without a persistent process, without OS scheduler setup, and without anything to install.
+
+When consolidation fires, you'll see a brief `[memory] consolidating patterns in background...` line on stderr. It completes in the background while your review runs (or just after, for fast commands like `insights`).
 
 During consolidation, the agent receives only metadata (file paths, descriptions, severity, PR ref) — **no source code is ever sent**. It produces structured summaries of recurring patterns, which are stored in the `consolidations` table and surfaced by `claude-review insights`.
+
+An optional background daemon (`claude-review memory start`) is still available if you want consolidation to run even when you're not actively using the tool — for example on a shared CI machine or a developer workstation that's always on.
 
 ## Data flow
 
