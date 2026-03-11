@@ -162,17 +162,20 @@ claude-review install-hook --remove
 
 ## 12. Enable memory across reviews
 
-The memory layer remembers patterns across all your PRs. Enable it:
+The memory layer remembers patterns across all your PRs. No setup required — just add `--memory`:
 
 ```bash
-# Start the background daemon (runs consolidation every 6 hours)
-claude-review memory start
-
-# Run a review with memory context
+# Run a review with memory enabled
 claude-review diff --memory
+claude-review pr 123 --memory
 ```
 
-When `--memory` is active, the review prompt is enriched with past findings from the same files, and new findings are stored for future reviews.
+After the first review, findings are stored in `.claude-review/memory.db`. On your next command, if 30+ minutes have passed or 10+ new findings exist, consolidation runs automatically in the background — no daemon needed.
+
+```bash
+# See what patterns have been detected across your PRs
+claude-review insights
+```
 
 [Learn more about the memory layer →](../memory/how-it-works.md)
 
