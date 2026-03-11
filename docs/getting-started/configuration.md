@@ -56,7 +56,7 @@ All secrets can be set via environment variables (preferred over the config file
 | `GITHUB_TOKEN` | GitHub personal access token or `GITHUB_TOKEN` from Actions |
 | `GITLAB_TOKEN` | GitLab personal access token |
 | `BITBUCKET_TOKEN` | Bitbucket app password (`username:password` or token) |
-| `AZURE_DEVOPS_TOKEN` | Azure DevOps PAT (v0.3.0) |
+| `AZURE_DEVOPS_TOKEN` | Azure DevOps PAT (v1.3.0) |
 
 ## Models
 
