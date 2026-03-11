@@ -2,6 +2,14 @@
 
 Anthropic offers a built-in Code Review feature as part of their Claude platform. This page explains what it is, how it differs from `claude-review`, and why you might choose one over the other.
 
+## The fundamental difference
+
+Anthropic Code Review gives you access to Claude. `claude-review` gives you access to Claude **plus a model that learns your codebase**.
+
+Every time you run `claude-review` with `--memory`, it stores findings locally. A daemon consolidates them into cross-PR patterns every 30 minutes. The next review is informed by everything the tool has seen before. After a month of use, your instance knows which files in your repo are chronic hotspots, which categories of bugs keep appearing, and which findings your team consistently rejects as noise.
+
+Anthropic's managed service resets to zero on every PR. That's not a criticism — it's a design tradeoff. For `claude-review`, persistent local memory is the core design.
+
 ## What is Anthropic Code Review?
 
 Anthropic Code Review is a managed service integrated into GitHub. When enabled, it automatically adds a reviewer to your pull requests, posts inline comments, and provides a summary of issues. It is configured through Anthropic's dashboard and requires no self-hosted infrastructure.
@@ -17,9 +25,10 @@ As of early 2026, it is available only to GitHub users on Team or Enterprise Ant
 | **Plan required** | Team or Enterprise | Any Anthropic API key |
 | **Self-hosted** | No — runs on Anthropic's infrastructure | Yes — runs on your machine |
 | **Open source** | No | MIT licensed |
-| **Source code leaves your system** | Yes — sent to Anthropic's review service | No — sent directly to the Anthropic API (same as any Claude API call) |
-| **Memory across PRs** | No | Yes (SQLite memory layer) |
-| **Cross-PR pattern detection** | No | Yes (`insights` command) |
+| **Source code leaves your system** | Yes | No — directly to `api.anthropic.com` only |
+| **Memory across PRs** | **No — resets to zero every PR** | **Yes — SQLite, per-repo, always local** |
+| **Cross-PR pattern detection** | No | Yes — consolidation daemon every 30 min |
+| **False positive suppression** | No | Yes — rejected findings remembered |
 | **Pre-commit hook** | No | Yes (`install-hook` command) |
 | **Local diff review** | No | Yes (`diff` command) |
 | **Cost estimate before running** | No | Yes (`--estimate` flag) |

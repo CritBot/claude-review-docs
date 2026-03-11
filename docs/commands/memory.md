@@ -26,7 +26,7 @@ claude-review memory <subcommand>
 claude-review memory start
 ```
 
-The daemon runs in the background and periodically consolidates findings from multiple reviews into cross-PR patterns. By default it runs consolidation every 6 hours or after 20 new findings are stored.
+The daemon runs in the background and periodically consolidates findings from multiple reviews into cross-PR patterns. It runs consolidation every 30 minutes (if new findings exist) or immediately when 10+ new findings have accumulated.
 
 ### Check daemon status
 

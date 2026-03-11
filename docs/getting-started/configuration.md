@@ -44,7 +44,7 @@ For preferences that apply across all your projects, create `~/.claude-review.js
 | `gitlab_token` | — | — | GitLab API token (also via `GITLAB_TOKEN` env) |
 | `bitbucket_token` | — | — | Bitbucket app password (also via `BITBUCKET_TOKEN` env) |
 | `gitlab_base_url` | `https://gitlab.com` | — | Override for self-hosted GitLab instances |
-| `memory_db` | `~/.claude-review/memory.db` | — | Path to the SQLite memory database |
+| `memory_db` | `<repo>/.claude-review/memory.db` | — | Path to the SQLite memory database (per-repo by default) |
 
 ## Environment variables
 

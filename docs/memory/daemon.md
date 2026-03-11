@@ -4,7 +4,7 @@ The consolidation daemon is a lightweight background process that periodically a
 
 ## What the daemon does
 
-The daemon wakes up every 6 hours (or when 20+ new findings have been stored since the last run) and calls the Consolidation Agent. This agent:
+The daemon wakes up every 30 minutes (or when 10+ new findings have been stored since the last run) and calls the Consolidation Agent. This agent:
 
 1. Reads all findings stored since the last consolidation
 2. Groups them by file, severity, and description similarity
@@ -77,10 +77,12 @@ journalctl --user -u claude-review-memory -f
 
 The daemon consolidates when **either** condition is met:
 
-| Trigger | Default |
-|---------|---------|
-| Time elapsed since last consolidation | 6 hours |
-| New findings stored since last run | 20 findings |
+| Trigger | Value |
+|---------|-------|
+| Time elapsed since last consolidation (with ≥1 new finding) | 30 minutes |
+| New findings stored since last run | 10 findings |
+
+On the very first run with any findings stored, consolidation runs immediately regardless of elapsed time.
 
 These are not currently configurable, but tuning them will be added in a future release.
 
