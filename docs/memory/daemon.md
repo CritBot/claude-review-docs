@@ -1,12 +1,24 @@
 # Daemon & Autostart
 
-!!! tip "No daemon required for most users"
-    `claude-review` has an **on-wake trigger**: consolidation fires automatically in the background whenever you run any `claude-review` command, if the time or volume trigger is met. You do not need the daemon unless you want consolidation to run even when you're not actively using the tool.
+## On-wake trigger vs daemon — which do you need?
 
-The optional background daemon is useful for:
-- Shared CI machines where reviews run unattended
-- Always-on developer workstations where you want patterns consolidated even during idle periods
-- Teams who want the `insights` command to always reflect the latest patterns
+**On-wake trigger (built-in, zero setup)** — consolidation runs in the background at the start of any `claude-review` command if the time or volume trigger is met. This is right for 99% of users:
+
+- Works on any machine, no process to manage
+- Pauses when you're not using the tool (closes laptop, goes on holiday)
+- Catches up automatically next time you run a review
+- No installation, no system permissions
+
+**Background daemon (optional)** — a persistent process that checks every 5 minutes and runs consolidation independently of your usage. Worth it only in specific cases:
+
+| Use case | Right choice |
+|----------|-------------|
+| Laptop / normal developer machine | On-wake trigger |
+| CI pipeline | On-wake trigger (fires during each review run) |
+| Shared CI server with infrequent `claude-review` invocations | Daemon |
+| Always-on workstation where you want `insights` updated overnight | Daemon |
+
+If you find yourself wondering "should I run `memory start`?" — the answer is almost certainly no. The on-wake trigger handles it.
 
 ## What the daemon does
 

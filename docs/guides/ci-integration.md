@@ -1,10 +1,55 @@
 # CI Integration
 
-`claude-review` is designed to fit naturally into CI pipelines. This page covers integration patterns for GitHub Actions, GitLab CI, and other CI systems.
+`claude-review` is designed to fit naturally into CI pipelines. This page covers integration patterns for GitHub Actions and GitLab CI, including how to carry the memory layer across pipeline runs.
+
+---
+
+## Memory in CI: two modes
+
+Before setting up CI, decide how you want memory to work:
+
+### Local-only (default)
+
+`.claude-review/` is gitignored. The memory DB lives only on developer machines. CI runs are stateless — every run starts cold with no prior findings.
+
+**Good for**: teams where only developers run reviews locally, CI is just for enforcement.
+
+### Shared / CI mode
+
+`memory.db` is committed to the repo (or stored on a separate git branch). CI picks it up automatically on checkout, runs the review with full memory context, and writes accumulated findings back.
+
+**Good for**: teams where CI is the primary review path, or where you want every developer and CI run to share the same growing knowledge of the codebase.
+
+The rest of this page focuses on shared mode — it's the setup that makes memory actually useful in CI.
+
+---
+
+## Shared mode: the orphan branch approach
+
+Committing `memory.db` directly to your main branch would bloat git history with binary file churn on every PR. The clean solution is a separate **orphan branch** (`claude-review-memory`) that stores only the DB file. It has no shared history with `main`, so it never inflates your main branch's object storage.
+
+### One-time setup
+
+```bash
+# Create the orphan branch locally
+git checkout --orphan claude-review-memory
+git rm -rf .
+echo "claude-review memory storage" > README.md
+git add README.md
+git commit -m "Initialize claude-review memory branch"
+git push origin claude-review-memory
+
+# Return to your working branch
+git checkout main
+```
+
+That's it. The `main` branch (and your `.gitignore`) don't change.
+
+---
 
 ## GitHub Actions
 
-### Basic PR review
+### Full PR review with memory
 
 ```yaml
 # .github/workflows/review.yml
@@ -12,13 +57,28 @@ name: Code Review
 
 on: [pull_request]
 
+permissions:
+  contents: write   # needed to push memory.db back to orphan branch
+  pull-requests: read
+
 jobs:
   review:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # full history needed for branch operations
+
+      - name: Restore memory DB
+        run: |
+          git fetch origin claude-review-memory 2>/dev/null || true
+          if git cat-file -e origin/claude-review-memory:memory.db 2>/dev/null; then
+            mkdir -p .claude-review
+            git show origin/claude-review-memory:memory.db > .claude-review/memory.db
+            echo "Memory DB restored ($(wc -c < .claude-review/memory.db) bytes)"
+          else
+            echo "No memory DB yet — first run will be cold"
+          fi
 
       - name: Install claude-review
         run: |
@@ -31,6 +91,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           claude-review pr ${{ github.event.pull_request.html_url }} \
+            --memory \
             --format json \
             --output review.json
 
@@ -40,130 +101,80 @@ jobs:
         with:
           name: code-review
           path: review.json
+
+      - name: Persist memory DB
+        # Only push memory back on main branch merges to avoid race conditions
+        # from concurrent PRs overwriting each other's DB updates.
+        if: github.ref == 'refs/heads/main' && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f .claude-review/memory.db ]; then
+            echo "No memory DB to persist"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Switch to orphan branch, update DB, push
+          git fetch origin claude-review-memory 2>/dev/null || true
+          git checkout claude-review-memory 2>/dev/null || \
+            git checkout --orphan claude-review-memory
+
+          cp .claude-review/memory.db memory.db
+          git add memory.db
+          git commit -m "Update claude-review memory [skip ci]" || echo "No changes"
+          git push origin claude-review-memory
+
+          git checkout ${{ github.sha }} -- .
 ```
 
 ### Block PRs on critical findings
 
 ```yaml
-- name: Review PR and enforce quality gate
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    claude-review pr ${{ github.event.pull_request.html_url }} \
-      --format json \
-      --output review.json
-
-    CRITICAL=$(jq '.summary.critical' review.json)
-    HIGH=$(jq '.summary.high' review.json)
-
-    if [ "$CRITICAL" -gt 0 ]; then
-      echo "❌ Found $CRITICAL critical issue(s). Review REVIEW.md for details."
-      exit 1
-    fi
-
-    if [ "$HIGH" -gt 3 ]; then
-      echo "⚠️ Found $HIGH high-severity issues (threshold: 3). Review required."
-      exit 1
-    fi
-
-    echo "✅ Review passed"
-```
-
-### Post findings as PR comments
-
-```yaml
-- name: Review PR
-  id: review
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    claude-review pr ${{ github.event.pull_request.html_url }} \
-      --format json \
-      --output review.json
-
-- name: Post review comment
-  if: always()
-  env:
-    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    CRITICAL=$(jq '.summary.critical' review.json)
-    HIGH=$(jq '.summary.high' review.json)
-    MEDIUM=$(jq '.summary.medium' review.json)
-
-    # Build comment body
-    BODY=$(cat <<EOF
-    ## 🤖 claude-review Results
-
-    | Severity | Count |
-    |----------|-------|
-    | 🔴 Critical | $CRITICAL |
-    | 🟠 High | $HIGH |
-    | 🟡 Medium | $MEDIUM |
-
-    $(jq -r '.findings[] | select(.severity == "critical" or .severity == "high") | "### \(.severity | ascii_upcase): \(.title)\n**\(.file):\(.line)** — \(.description)\n"' review.json)
-
-    *Cost: $(jq -r '.cost.estimated_usd' review.json | awk '{printf "$%.3f", $1}') · $(jq '.agents_used' review.json) agents · $(jq '.duration_seconds' review.json)s*
-    EOF
-    )
-
-    gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
-```
-
-### Inline annotations
-
-```yaml
-- name: Review PR
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    claude-review pr ${{ github.event.pull_request.html_url }} \
-      --format annotations \
-      --output annotations.json
-
-- name: Upload annotations
-  uses: yuzutech/annotations-action@v0.4.0
-  if: always()
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    title: claude-review
-    input: annotations.json
-```
-
-### Security-only review for main branch merges
-
-```yaml
-name: Security Review on Merge
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  security-review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Install claude-review
+      - name: Enforce quality gate
         run: |
-          curl -sSL https://github.com/critbot/claude-review/releases/latest/download/claude-review-linux-amd64.tar.gz | tar xz
-          sudo mv claude-review /usr/local/bin/
+          CRITICAL=$(jq '.summary.critical' review.json)
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "❌ $CRITICAL critical finding(s) — review REVIEW.md"
+            exit 1
+          fi
+```
 
-      - name: Security review of merged changes
+### Post findings as a PR comment
+
+```yaml
+      - name: Comment on PR
+        if: always()
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          claude-review diff HEAD~1 \
-            --focus security \
-            --model claude-sonnet-4-6 \
-            --format json \
-            --output security-review.json
+          CRITICAL=$(jq '.summary.critical' review.json)
+          HIGH=$(jq '.summary.high' review.json)
+          MEDIUM=$(jq '.summary.medium' review.json)
+          COST=$(jq -r '.cost.estimated_usd' review.json | awk '{printf "%.3f", $1}')
+
+          FINDINGS=$(jq -r '
+            .findings[]
+            | select(.severity == "critical" or .severity == "high")
+            | "**\(.severity | ascii_upcase)** `\(.file):\(.line)` — \(.title)"
+          ' review.json | head -10)
+
+          BODY="## 🤖 claude-review
+
+          | 🔴 Critical | 🟠 High | 🟡 Medium |
+          |------------|---------|----------|
+          | $CRITICAL | $HIGH | $MEDIUM |
+
+          $FINDINGS
+
+          *\$$COST · ${{ github.sha }} · [full report]()*"
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
 ```
+
+---
 
 ## GitLab CI
 
@@ -173,20 +184,40 @@ code_review:
   stage: review
   image: alpine:latest
   before_script:
-    - apk add --no-cache curl
+    - apk add --no-cache curl git jq
     - |
       curl -sSL https://github.com/critbot/claude-review/releases/latest/download/claude-review-linux-amd64.tar.gz | tar xz
       mv claude-review /usr/local/bin/
   script:
+    # Restore memory DB from orphan branch
     - |
-      claude-review pr $CI_MERGE_REQUEST_PROJECT_URL/-/merge_requests/$CI_MERGE_REQUEST_IID \
+      git fetch origin claude-review-memory 2>/dev/null || true
+      if git cat-file -e origin/claude-review-memory:memory.db 2>/dev/null; then
+        mkdir -p .claude-review
+        git show origin/claude-review-memory:memory.db > .claude-review/memory.db
+      fi
+    # Run the review
+    - |
+      claude-review pr "$CI_MERGE_REQUEST_PROJECT_URL/-/merge_requests/$CI_MERGE_REQUEST_IID" \
+        --memory \
         --format json \
         --output review.json
+    # Quality gate
     - |
       CRITICAL=$(jq '.summary.critical' review.json)
-      if [ "$CRITICAL" -gt 0 ]; then
-        cat review.json | jq '.findings[] | select(.severity == "critical")'
-        exit 1
+      [ "$CRITICAL" -eq 0 ] || (echo "Critical findings detected"; exit 1)
+    # Persist memory DB (main branch only)
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        git config user.name "gitlab-ci-bot"
+        git config user.email "gitlab-ci-bot@noreply"
+        git fetch origin claude-review-memory 2>/dev/null || true
+        git checkout claude-review-memory 2>/dev/null || git checkout --orphan claude-review-memory
+        cp .claude-review/memory.db memory.db
+        git add memory.db
+        git commit -m "Update claude-review memory [skip ci]" || true
+        git push origin claude-review-memory
+        git checkout "$CI_COMMIT_SHA"
       fi
   artifacts:
     paths:
@@ -194,70 +225,84 @@ code_review:
     when: always
   only:
     - merge_requests
+    - main
   variables:
     ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
     GITLAB_TOKEN: $GITLAB_TOKEN
 ```
 
-## Cost management in CI
+---
 
-To avoid unexpected API costs in CI:
+## Why only persist on main?
 
-### Use --estimate first (for budget-conscious pipelines)
+PRs run concurrently. If every PR pushes its updated `memory.db` back to the orphan branch, two PRs running at the same time will race and one will overwrite the other's update.
 
-```yaml
-- name: Estimate review cost
-  run: |
-    ESTIMATE=$(claude-review pr $PR_URL --estimate 2>&1)
-    echo "$ESTIMATE"
+The safe pattern: **PRs read memory (for context), but only merged commits write it back.**
 
-    # Parse estimated cost and gate on it
-    COST=$(echo "$ESTIMATE" | grep -oP '\$\K[0-9.]+' | head -1)
-    if (( $(echo "$COST > 5.0" | bc -l) )); then
-      echo "Estimated cost $COST exceeds $5 threshold, skipping review"
-      exit 0
-    fi
+This means:
+- PRs get full memory context on review ✓
+- Memory is updated once per merge, not per PR ✓
+- No race conditions ✓
+
+A short delay between a merge and the next PR seeing the updated memory is acceptable.
+
+---
+
+## Memory DB size in CI
+
+`memory.db` is a SQLite file. After consolidation (which runs automatically on every `claude-review` invocation if the trigger conditions are met), the DB is pruned:
+
+- Findings older than **90 days** are deleted
+- Each file is capped at its **50 most recent findings**
+- Consolidated insights are never pruned — they're compact text summaries
+
+On an active repo with 10 PRs/week, expect the DB to stabilize under **1 MB** permanently. It's safe to commit this to git — the orphan branch approach ensures it never touches your main branch's history.
+
+To check the current DB size:
+
+```bash
+ls -lh .claude-review/memory.db
+sqlite3 .claude-review/memory.db "SELECT COUNT(*) FROM findings;"
 ```
 
-### Set max_cost_usd in config
-
-```json
-{
-  "max_cost_usd": 3.00
-}
-```
-
-The review aborts before making API calls if the estimate exceeds this.
-
-### Use Haiku for most PRs, Sonnet only for large ones
-
-```yaml
-- name: Determine model based on diff size
-  run: |
-    LINES=$(git diff origin/main...HEAD | wc -l)
-    if [ "$LINES" -gt 2000 ]; then
-      MODEL="claude-sonnet-4-6"
-    else
-      MODEL="claude-haiku-4-5-20251001"
-    fi
-
-    claude-review pr $PR_URL --model $MODEL --format json --output review.json
-```
+---
 
 ## Required secrets
 
 | Secret | Used for |
 |--------|----------|
 | `ANTHROPIC_API_KEY` | All reviews (required) |
-| `GITHUB_TOKEN` | GitHub PR reviews (auto-provided in GH Actions) |
+| `GITHUB_TOKEN` | GitHub PR reviews + pushing memory back (auto-provided in GH Actions) |
 | `GITLAB_TOKEN` | GitLab MR reviews |
 | `BITBUCKET_TOKEN` | Bitbucket PR reviews |
 
-In GitHub Actions, `GITHUB_TOKEN` is automatically provided by the workflow runner — no manual secret setup needed for GitHub PR reviews.
+---
 
-## Tips for CI
+## Non-memory CI setup
 
-- **Cache the binary**: Download once in a setup step and cache it across runs to save time
-- **Use `--agents 3`** in CI to reduce API rate limit pressure from concurrent pipelines
-- **Upload review.json as an artifact** with `if: always()` so you can inspect reviews even when the job fails
-- **Only run on PRs, not every push** to avoid redundant reviews of intermediate commits
+If you don't want shared memory in CI, the minimal setup is:
+
+```yaml
+- name: Install claude-review
+  run: |
+    curl -sSL https://github.com/critbot/claude-review/releases/latest/download/claude-review-linux-amd64.tar.gz | tar xz
+    sudo mv claude-review /usr/local/bin/
+
+- name: Review PR
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    claude-review pr ${{ github.event.pull_request.html_url }} \
+      --format json \
+      --output review.json
+
+- name: Upload review
+  uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: code-review
+    path: review.json
+```
+
+No memory, no orphan branch, no extra permissions. Every run is cold but still catches issues in the diff.

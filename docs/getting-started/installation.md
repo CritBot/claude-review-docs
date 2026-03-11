@@ -42,7 +42,37 @@ Download the latest binary for your platform:
     ```
 
 === "Windows amd64"
-    Download `claude-review-windows-amd64.zip` from the [latest release](https://github.com/critbot/claude-review/releases/latest), extract, and add the executable to your PATH.
+
+    **Option 1 — Direct download (PowerShell)**
+    ```powershell
+    # Download and extract
+    Invoke-WebRequest -Uri "https://github.com/critbot/claude-review/releases/latest/download/claude-review-windows-amd64.zip" -OutFile claude-review.zip
+    Expand-Archive claude-review.zip -DestinationPath .
+
+    # Move to a directory on your PATH, e.g.:
+    Move-Item claude-review.exe "$env:USERPROFILE\bin\claude-review.exe"
+    ```
+
+    **Option 2 — Build from source** (requires Go 1.22+, see below)
+
+    **Setting ANTHROPIC_API_KEY on Windows:**
+    ```powershell
+    # Current session only
+    $env:ANTHROPIC_API_KEY = "sk-ant-..."
+
+    # Persist across sessions (user-level)
+    [System.Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
+    ```
+
+## Go install
+
+If you have Go 1.22+ installed, the simplest cross-platform option:
+
+```bash
+go install github.com/critbot/claude-review/cmd/claude-review@latest
+```
+
+This builds from source and installs to `$GOPATH/bin` (typically `~/go/bin`).
 
 ## Build from source
 

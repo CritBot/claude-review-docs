@@ -104,13 +104,60 @@ The finder agent sees this before the diff, so it enters the review already awar
 
 When no hotspot files or insights exist yet (e.g. first few reviews), `FormatContextBlock()` returns an empty string and nothing is prepended — the review runs exactly as it would without `--memory`.
 
+## Storage modes
+
+### Local-only (default)
+
+`.claude-review/` is gitignored. Memory exists only on your machine. CI runs start cold — no memory context, findings not persisted.
+
+```
+Developer machine:   .claude-review/memory.db  (gitignored)
+CI:                  no DB → cold start every run
+```
+
+This is fine for solo developers or teams where reviews only happen locally.
+
+### Shared / CI mode
+
+Remove `memory.db` from `.gitignore` (or use the orphan branch approach below) so the DB is committed to the repo. CI picks it up on checkout, runs the review with full memory context, and writes findings back after the merge.
+
+```
+git repo:            .claude-review/memory.db  (committed, or on orphan branch)
+Developer machine:   git pull → gets full team memory
+CI:                  git checkout → gets full team memory
+```
+
+### Recommended: orphan branch
+
+Committing `memory.db` to your main branch creates binary file churn in git history. The clean solution is a separate orphan branch (`claude-review-memory`) with no shared history:
+
+```bash
+# One-time setup
+git checkout --orphan claude-review-memory
+git rm -rf .
+echo "claude-review memory storage" > README.md
+git add README.md && git commit -m "Init"
+git push origin claude-review-memory
+git checkout main
+```
+
+CI reads the DB from the orphan branch before each review and writes it back after merges to main. See the [CI Integration guide](../guides/ci-integration.md) for the full workflow.
+
+### DB size and git bloat
+
+`memory.db` stays small by design. After every consolidation, the DB is automatically pruned:
+
+- Findings older than **90 days** are deleted
+- Each file is capped at its **50 most recent findings**
+- Consolidated insights (compact text summaries) are never pruned
+
+On an active repo with 10 PRs/week, the DB stabilises under **1 MB** permanently. It's safe to commit to the orphan branch — binary deltas in a dedicated branch with no code are negligible.
+
 ## Privacy
 
-All data stays on your machine:
-
-- `memory.db` is local to `<repo>/.claude-review/` and is never synced anywhere
+- `memory.db` is local by default (gitignored); opt into shared mode explicitly
 - During consolidation, **only metadata** is sent to the Anthropic API: file paths, severity, category, description, and PR reference — **no source code**
-- The daemon's PID file and log live in `~/.claude-review/` (separate from the per-repo DB)
+- The optional daemon's PID file and log live in `~/.claude-review/` (separate from the per-repo DB)
 
 ## False positives
 
