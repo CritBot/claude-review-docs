@@ -1,0 +1,93 @@
+site_name: claude-review
+site_description: Open-source multi-agent code review CLI powered by Claude
+site_url: https://critbot.github.io/claude-review-docs
+repo_url: https://github.com/critbot/claude-review
+repo_name: critbot/claude-review
+edit_uri: ""
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/critbot/claude-review
+  analytics:
+    provider: google
+    property: ""
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Configuration: getting-started/configuration.md
+  - Commands:
+    - Overview: commands/overview.md
+    - diff: commands/diff.md
+    - pr: commands/pr.md
+    - memory: commands/memory.md
+    - insights: commands/insights.md
+    - install-hook: commands/install-hook.md
+  - Memory Layer:
+    - How It Works: memory/how-it-works.md
+    - Using Memory in Reviews: memory/using-memory.md
+    - Daemon & Autostart: memory/daemon.md
+  - Guides:
+    - CI Integration: guides/ci-integration.md
+    - Output Formats: guides/output-formats.md
+    - Multi-Agent Pipeline: guides/pipeline.md
+    - vs Anthropic Code Review: guides/vs-anthropic.md
+  - Contributing: contributing.md
