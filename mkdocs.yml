@@ -7,6 +7,8 @@ edit_uri: ""
 
 theme:
   name: material
+  logo: assets/claude-review-icon-128.png
+  favicon: assets/claude-review-icon-64.png
   palette:
     - scheme: default
       primary: indigo

@@ -60,7 +60,7 @@ Unlike cloud-hosted review tools, `claude-review` runs entirely on your machine 
 
 ## Architecture
 
-![claude-review pipeline: PR diff → parallel finder agents → verifier → ranker → output](assets/pipeline.svg)
+![claude-review pipeline: PR diff → parallel finder agents → verifier → ranker → output](assets/claude-review-hero.png)
 
 ## How it works
 
