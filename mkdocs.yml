@@ -90,4 +90,5 @@ nav:
     - Output Formats: guides/output-formats.md
     - Multi-Agent Pipeline: guides/pipeline.md
     - vs Anthropic Code Review: guides/vs-anthropic.md
+  - Roadmap: roadmap.md
   - Contributing: contributing.md
