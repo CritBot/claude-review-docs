@@ -2,6 +2,8 @@
 
 `claude-review` runs a purpose-built multi-agent pipeline designed to maximize finding coverage while minimizing false positives and cost.
 
+![Pipeline architecture diagram showing PR diff input, parallel finder agents, verifier, ranker, and output panel](../assets/pipeline.svg)
+
 ## Why multiple agents?
 
 A single large prompt asking Claude to "find all bugs" in a diff produces mediocre results. When a model must simultaneously reason about logic bugs, security, performance, type safety, and test coverage, attention is split and important findings are missed.
